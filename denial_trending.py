@@ -7,14 +7,30 @@ import re
 st.set_page_config(page_title="Denial Reason Analyzer", layout="wide")
 st.title("📊 Denial Reason Analyzer")
 
-file1 = st.file_uploader("Upload First Excel File", type=["xlsx"])
-file2 = st.file_uploader("Upload Second Excel File", type=["xlsx"])
+# ---------------- Upload Section (Single or Multiple Files) ---------------- #
+uploaded_files = st.file_uploader(
+    "Upload Denial Tracking File(s)",
+    type=["xlsx"],
+    accept_multiple_files=True
+)
 
-if file1 and file2:
-    df1 = pd.read_excel(file1, header=1)
-    df2 = pd.read_excel(file2, header=1)
-    df = pd.concat([df1, df2], ignore_index=True)
-    st.success(f"✅ Combined data shape: {df.shape}")
+if uploaded_files:
+
+    dfs = []
+    for file in uploaded_files:
+        try:
+            df_temp = pd.read_excel(file, header=1)
+            dfs.append(df_temp)
+        except Exception as e:
+            st.error(f"❌ Error reading {file.name}: {e}")
+
+    if not dfs:
+        st.warning("No valid sheets found in uploaded files.")
+        st.stop()
+
+    # Combine all uploaded files
+    df = pd.concat(dfs, ignore_index=True)
+    st.success(f"✅ Total combined records: {df.shape}")
 
     # ---------------- Cleaning Function ---------------- #
     def clean_reason_code(row):
@@ -28,7 +44,6 @@ if file1 and file2:
         exclude_trivial = {"PR1", "PR2", "PR3", "PR100", "CO253"}
         codes = [c for c in codes if c not in exclude_trivial]
 
-        # Priority selection logic
         if "CO109" in codes or "PR109" in codes:
             selected_code = "CO109"
         elif "CO96" in codes and "OA97" in codes:
@@ -102,14 +117,14 @@ if file1 and file2:
         st.dataframe(final_summary, use_container_width=True)
 
         st.download_button(
-            "⬇️ Download Cleaned Data (Excel)",
+            "⬇️ Download Cleaned Summary (CSV)",
             data=final_summary.to_csv(index=False).encode('utf-8'),
             file_name="cleaned_denial_summary.csv",
             mime="text/csv"
         )
 
     with tab2:
-        st.subheader("Top 10 Denial Reasons (3D Pie Chart)")
+        st.subheader("Top 10 Denial Reasons (3D Styled Pie Chart)")
         top10 = final_summary.head(10)
         others_sum = final_summary['Distinct Claims'][10:].sum()
 
@@ -123,7 +138,6 @@ if file1 and file2:
         else:
             final_df = top10
 
-        # ---------------- 3D Pie Chart using Plotly ---------------- #
         fig = go.Figure(
             data=[go.Pie(
                 labels=final_df['Normalized Code'],
@@ -135,7 +149,6 @@ if file1 and file2:
             )]
         )
 
-        # 3D effect styling
         fig.update_traces(
             textfont_size=14,
             hoverinfo='label+value+percent',
